@@ -458,8 +458,44 @@ function minecraftView(v,t){
     setTimeout(focusGame,60);
   };
 
+  const installMinecraftInputGuard=()=>{
+    try{
+      const doc=f.contentDocument;
+      if(!doc || doc.__chickenMinecraftInputGuard)return;
+      doc.__chickenMinecraftInputGuard=true;
+      let suppressMouseUntil=0;
+      let escReleasePending=false;
+      const markEsc=()=>{
+        escReleasePending=true;
+        suppressMouseUntil=performance.now()+180;
+      };
+      doc.addEventListener('keydown',e=>{
+        if(e.key==='Escape' || e.code==='Escape') markEsc();
+      },true);
+      doc.addEventListener('keyup',e=>{
+        if(e.key==='Escape' || e.code==='Escape'){
+          escReleasePending=true;
+          suppressMouseUntil=Math.max(suppressMouseUntil,performance.now()+120);
+          setTimeout(()=>{escReleasePending=false},140);
+        }
+      },true);
+      doc.addEventListener('pointerlockchange',()=>{
+        if(!doc.pointerLockElement){
+          escReleasePending=true;
+          suppressMouseUntil=Math.max(suppressMouseUntil,performance.now()+180);
+          setTimeout(()=>{escReleasePending=false},190);
+        }
+      },true);
+      doc.addEventListener('mousemove',e=>{
+        if(escReleasePending || performance.now()<suppressMouseUntil){
+          e.stopImmediatePropagation();
+        }
+      },true);
+    }catch{}
+  };
   f.addEventListener('load',()=>{
     loading?.remove();
+    installMinecraftInputGuard();
     activateGame();
   });
   f.addEventListener('pointerdown',activateGame,{passive:true});
