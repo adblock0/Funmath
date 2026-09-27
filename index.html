@@ -73,7 +73,7 @@ body{overflow:hidden}.app{height:100%;display:flex;flex-direction:column;backgro
         <section class="section settings-pane" data-pane="search"><h3>Search</h3><p>Control the new-tab search experience, live address updates, and locally stored suggestions.</p><div class="settings-card"><div class="row"><label>Search engine</label><span style="font-size:12px;color:#aaa">Google</span></div><div class="row"><label>Suggestion history</label><button class="mini-btn" id="clearSearchHistory">Clear history</button></div></div></section>
         <section class="section settings-pane" data-pane="privacy"><h3>Privacy & Cloaking</h3><p>Choose the title and favicon used for the current Chicken page.</p><div class="settings-card"><div class="row"><label>Resources cloak</label><button class="mini-btn" id="cloakClever">Use Resources</button></div><div class="row"><label>New Tab cloak</label><button class="mini-btn" id="cloakNew">Use New Tab</button></div><div class="row"><label><strong>Ad blocker</strong><br><span style="color:#666;font-size:10px">Blocks common ad/tracker requests and hides ad containers inside proxied pages.</span></label><button class="switch on" id="adToggle" aria-label="Toggle ad blocker"><i></i></button></div><div class="row"><label>Block third-party trackers</label><button class="switch on" id="trackerToggle" aria-label="Toggle tracker blocking"><i></i></button></div><div class="label">Allowlist host</div><div class="row"><input class="setting-input" id="adAllowlist" placeholder="example.com, trusted.example"><button class="mini-btn" id="saveAllowlist">Save</button></div><div class="row"><label>Blocked on this page</label><strong id="blockedCount" style="font-size:13px;color:#fff">0</strong></div></div></section>
         <section class="section settings-pane" data-pane="panic"><h3>Panic Button</h3><p>Press the hotkey to immediately navigate the current tab to your configured panic URL.</p><div class="settings-card"><div class="label">Hotkey</div><input class="setting-input key-capture" id="panicKey" value="F9" placeholder="Press a key combination" readonly autocomplete="off"><div class="label">Custom Panic URL</div><input class="setting-input" id="panicUrl" value="https://classroom.google.com/" placeholder="https://classroom.google.com/"></div></section>
-        <section class="section settings-pane" data-pane="advanced"><h3>Advanced</h3><p>Transport and connection preferences for the Scramjet proxy.</p><div class="settings-card"><div class="label">Proxy transport</div><select class="setting-select" id="transport"><option value="libcurl">Libcurl (default)</option></select><div class="settings-actions"><button class="save-btn" id="saveSettings">Save settings</button><button class="mini-btn" id="resetSettings">Reset all settings</button></div></div></section>
+        <section class="section settings-pane" data-pane="advanced"><h3>Advanced</h3><p>Transport and connection preferences for the Scramjet proxy.</p><div class="settings-card"><div class="label">Proxy transport</div><select class="setting-select" id="transport"><option value="epoxy">Eproxy (default)</option><option value="libcurl">Libcurl</option></select><div class="settings-actions"><button class="save-btn" id="saveSettings">Save settings</button><button class="mini-btn" id="resetSettings">Reset all settings</button></div></div></section>
       </div>
     </div>
   </aside>
@@ -84,15 +84,15 @@ const KEY='chicken-settings-v8';
 const LEGACY_KEY='chicken-settings-v7';
 const DEFAULT_WALLPAPER_SOURCE='https://www.magnific.com/free-photos-vectors/black-white-wallpaper';
 const DEFAULT_WALLPAPER_IMAGE='https://img.magnific.com/premium-photo/abstract-black-stripes-white-background-wave-black-white-zebra-wallpaper-generative-ai_159242-31501.jpg?ga=GA1.1.877066675.1790480323&semt=ais_hybrid&w=740&q=80';
-const defaults={cloak:'resources',panicKey:'F9',panicUrl:'https://classroom.google.com/',adblock:true,trackerBlock:true,adAllowlist:'',transport:'libcurl',suggestions:true,background:DEFAULT_WALLPAPER_IMAGE};
+const defaults={cloak:'resources',panicKey:'F9',panicUrl:'https://classroom.google.com/',adblock:true,trackerBlock:true,adAllowlist:'',transport:'epoxy',suggestions:true,background:DEFAULT_WALLPAPER_IMAGE};
 let settings={...defaults};
 try{
   const current=JSON.parse(localStorage.getItem(KEY)||'null');
-  if(current && typeof current==='object') settings={...defaults,...current,transport:'libcurl'};
+  if(current && typeof current==='object') settings={...defaults,...current};
   else {
     const legacy=JSON.parse(localStorage.getItem(LEGACY_KEY)||'null');
     if(legacy && typeof legacy==='object'){
-      settings={...defaults,...legacy,transport:'libcurl'};
+      settings={...defaults,...legacy,transport:'epoxy'};
       localStorage.setItem(KEY,JSON.stringify(settings));
     }
   }
@@ -210,23 +210,14 @@ async function removeLegacyRootServiceWorker(){
 const WISP_URL='wss://wisp.mercurywork.shop/';
 
 async function makeTransport(mode){
-  // Use the Scramjet 2.x transport API directly.  The controller version
-  // bundled by Chicken expects the transport to be initialized before the
-  // Controller is constructed.  Do not wrap the client: the wrapper hides
-  // init() from the service-worker RPC bridge and causes
-  // `this.transport.init is not a function`.
-  const m=String(mode||'libcurl').toLowerCase();
-  let mod,Client;
-  if(m==='epoxy'){
-    mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3.0.1/dist/index.mjs');
-    Client=mod.EpoxyClient||mod.default;
-  }else{
-    mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/libcurl-transport@2.0.5/dist/index.mjs');
-    Client=mod.LibcurlClient||mod.default;
-  }
-  if(typeof Client!=='function') throw new TypeError((m==='epoxy'?'EpoxyClient':'LibcurlClient')+' export not found');
+  // Use Eproxy directly. Scramjet's ProxyTransport interface requires an
+  // initialized transport; wrapping it hides init()/ready/connect semantics
+  // from the controller and is what caused the previous init error.
+  const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3.0.1/dist/index.mjs');
+  const Client=mod.EpoxyClient||mod.default||mod;
+  if(typeof Client!=='function') throw new TypeError('EpoxyClient export not found');
   const transport=new Client({wisp:WISP_URL});
-  if(typeof transport.init!=='function') throw new TypeError((m==='epoxy'?'EpoxyClient':'LibcurlClient')+' does not implement init()');
+  if(typeof transport.init!=='function') throw new TypeError('EpoxyClient does not implement init()');
   await transport.init();
   return transport;
 }
@@ -303,7 +294,7 @@ async function initScramjetController(){
     if(!serviceworker) throw new Error('No active Scramjet service worker is available. Upload sj-sw.js beside index.html and reload once.');
 
     // Match the current Scramjet 2.x transport interface.
-    const transport=await makeTransport(settings.transport||'epoxy');
+    const transport=await makeTransport('epoxy');
     scramjetController=new Controller({
       serviceworker,
       transport,
@@ -390,84 +381,21 @@ function minecraftView(v,t){
   f.className='chat-frame';
   f.setAttribute('allow','fullscreen; autoplay; picture-in-picture; gamepad; pointer-lock; clipboard-read; clipboard-write');
   f.setAttribute('referrerpolicy','no-referrer');
-  f.setAttribute('tabindex','0');
   f.title='Minecraft';
   f.style.position='absolute';f.style.left='0';f.style.top='0';f.style.right='0';f.style.bottom='0';f.style.width='100%';f.style.height='100%';f.style.border='0';
-  f.style.display='block';
   t.frameel=f;
   v.appendChild(f);
   const loading=loadingView(v,'Loading Minecraft…');
-
-  const focusGame=()=>{
-    try{f.focus({preventScroll:true})}catch{try{f.focus()}catch{}}
-    try{f.contentWindow.focus()}catch{}
-  };
-  const activateGame=()=>{
-    focusGame();
-    // A second focus after the browser processes the iframe click helps
-    // Eaglercraft receive the keyboard/mouse activation inside Chicken.
-    setTimeout(focusGame,0);
-    setTimeout(focusGame,60);
-  };
-
-  const installMinecraftInputGuard=()=>{
-    try{
-      const doc=f.contentDocument;
-      if(!doc || doc.__chickenMinecraftInputGuard)return;
-      doc.__chickenMinecraftInputGuard=true;
-      let suppressMouseUntil=0;
-      let escReleasePending=false;
-      const markEsc=()=>{
-        escReleasePending=true;
-        suppressMouseUntil=performance.now()+180;
-      };
-      doc.addEventListener('keydown',e=>{
-        if(e.key==='Escape' || e.code==='Escape') markEsc();
-      },true);
-      doc.addEventListener('keyup',e=>{
-        if(e.key==='Escape' || e.code==='Escape'){
-          escReleasePending=true;
-          suppressMouseUntil=Math.max(suppressMouseUntil,performance.now()+120);
-          setTimeout(()=>{escReleasePending=false},140);
-        }
-      },true);
-      doc.addEventListener('pointerlockchange',()=>{
-        if(!doc.pointerLockElement){
-          escReleasePending=true;
-          suppressMouseUntil=Math.max(suppressMouseUntil,performance.now()+180);
-          setTimeout(()=>{escReleasePending=false},190);
-        }
-      },true);
-      doc.addEventListener('mousemove',e=>{
-        if(escReleasePending || performance.now()<suppressMouseUntil){
-          e.stopImmediatePropagation();
-        }
-      },true);
-    }catch{}
-  };
-  f.addEventListener('load',()=>{
-    loading?.remove();
-    installMinecraftInputGuard();
-    activateGame();
-  });
-  f.addEventListener('pointerdown',activateGame,{passive:true});
-  f.addEventListener('mousedown',activateGame,{passive:true});
-  f.addEventListener('focus',focusGame);
-
-  // Load the actual same-origin Minecraft document. Chicken's Scramjet
-  // service-worker scope is /~/sj/, so Minecraft.html itself is not proxied.
-  // Keeping the real document in the iframe preserves normal keyboard,
-  // text-input, canvas, and pointer-lock behavior.
-  f.src=new URL('Minecraft.html',location.href).href;
-
-  // If the user switches away and back to the Chicken tab, restore focus
-  // without stealing focus from the address bar while it is being edited.
-  const focusOnReturn=()=>{
-    if(t===current() && document.activeElement!==$('address')) focusGame();
-  };
-  t.minecraftFocus=focusOnReturn;
-  document.addEventListener('visibilitychange',focusOnReturn);
+  v.appendChild(f);
+  fetch(new URL('Minecraft.html',location.href).href,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Minecraft.html returned HTTP '+r.status);return r.blob()}).then(blob=>{
+    if(t.minecraftBlobUrl){try{URL.revokeObjectURL(t.minecraftBlobUrl)}catch{}}
+    t.minecraftBlobUrl=URL.createObjectURL(new Blob([blob],{type:'text/html'}));
+    f.onload=()=>{loading?.remove();try{f.contentWindow.focus()}catch{}};
+    f.src=t.minecraftBlobUrl;
+  }).catch(err=>{loading?.remove();errorView(v,'Minecraft could not load: '+(err?.message||String(err)));});
+  f.addEventListener('pointerdown',()=>{try{f.contentWindow.focus()}catch{}},{passive:true});
 }
+
 function updateLiveAddress(t,url){
   const next=String(url||'').trim();
   if(!next)return;
@@ -646,8 +574,8 @@ $('suggestToggle').onclick=()=>{settings.suggestions=!settings.suggestions;$('su
 $('adToggle').classList.toggle('on',settings.adblock!==false);
 $('trackerToggle').classList.toggle('on',settings.trackerBlock!==false);
 $('adAllowlist').value=settings.adAllowlist||'';
-$('transport').value=settings.transport||'libcurl';
-$('transport').onchange=async()=>{settings.transport='libcurl';$('transport').value='libcurl';save();toast('Libcurl transport selected')};
+$('transport').value=settings.transport||'epoxy';
+$('transport').onchange=async()=>{settings.transport='epoxy';$('transport').value='epoxy';save();if(scramjetController){try{scramjetController.setTransport(await makeTransport('epoxy'));toast('Eproxy transport selected')}catch(e){toast('Eproxy transport change failed')}}else toast('Saved Eproxy preference')};
 $('adToggle').onclick=()=>{settings.adblock=!settings.adblock;$('adToggle').classList.toggle('on',settings.adblock);save();toast(settings.adblock?'Ad blocker enabled':'Ad blocker disabled');render()};
 $('trackerToggle').onclick=()=>{settings.trackerBlock=!settings.trackerBlock;$('trackerToggle').classList.toggle('on',settings.trackerBlock);save();toast(settings.trackerBlock?'Tracker blocking enabled':'Tracker blocking disabled');render()};
 $('saveAllowlist').onclick=()=>{settings.adAllowlist=String($('adAllowlist').value||'').trim();save();toast('Ad blocker allowlist saved');render()};
