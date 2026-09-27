@@ -28,7 +28,7 @@ button,input{font:inherit}button{cursor:pointer}.wrap{height:100%;display:flex;f
 </div></div>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js';
-import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
+import { getFirestore, collection, addDoc, doc, query, orderBy, limit, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 const firebaseConfig={apiKey:'AIzaSyAF7B7qYDrUi-C5_6LCjQfoXRhH95QmIio',authDomain:'v14a-bb967.firebaseapp.com',projectId:'v14a-bb967',storageBucket:'v14a-bb967.firebasestorage.app',messagingSenderId:'226123648400',appId:'1:226123648400:web:089323e070661a87c4b715',measurementId:'G-R9Q24182LC'};
 const db=getFirestore(initializeApp(firebaseConfig));
 const $=id=>document.getElementById(id); const key='chicken-chat-settings-v2';
