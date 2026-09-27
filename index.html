@@ -208,106 +208,18 @@ async function removeLegacyRootServiceWorker(){
 }
 
 const WISP_URL='wss://wisp.mercurywork.shop/';
-let activeTransportMode='';
-let fallbackTransportPromise=null;
-function isTransportHandshakeError(err){
-  const msg=String(err?.message||err||'').toLowerCase();
-  return /tls handshake eof|unexpected eof|handshake.*eof|tls.*handshake|connect.*unexpected eof/.test(msg);
-}
-async function buildRawTransport(mode){
-  const m=String(mode||'epoxy').toLowerCase();
-  // Scramjet 2.x expects the transport object directly on Controller.
-  if(m==='epoxy'){
-    const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3.0.1/dist/index.mjs');
-    const Client=mod.EpoxyClient||mod.default?.EpoxyClient||mod.default;
-    if(typeof Client!=='function') throw new TypeError('EpoxyClient export not found');
-    return new Client({websocket:WISP_URL});
-  }
-  const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/libcurl-transport@2.0.5/dist/index.mjs');
-  const Client=mod.LibcurlClient||mod.default?.LibcurlClient||mod.default;
-  if(typeof Client!=='function') throw new TypeError('LibcurlClient export not found');
-  return new Client({websocket:WISP_URL});
-}
-async function makeLibcurlFallback(){
-  if(!fallbackTransportPromise) fallbackTransportPromise=buildRawTransport('libcurl');
-  return fallbackTransportPromise;
-}
-function makeResilientTransport(primary,mode){
-  let current=primary;
-  let fallbackUsed=String(mode||'').toLowerCase()!=='epoxy';
-  let initialized=false;
-
-  const switchToLibcurl=async()=>{
-    const next=await makeLibcurlFallback();
-    current=next;
-    fallbackUsed=true;
-    initialized=false;
-    if(scramjetController) scramjetController.setTransport(next);
-    toast('Eproxy connection failed — switched to Libcurl');
-    return next;
-  };
-
-  return {
-    get ready(){return !!current?.ready && initialized;},
-    async init(){
-      if(initialized) return;
-      try{
-        if(typeof current?.init!=='function') throw new TypeError('Selected transport does not implement init()');
-        await current.init();
-        initialized=true;
-      }catch(err){
-        if(!fallbackUsed && isTransportHandshakeError(err)){
-          await switchToLibcurl();
-          if(typeof current?.init!=='function') throw new TypeError('Libcurl transport does not implement init()');
-          await current.init();
-          initialized=true;
-          return;
-        }
-        throw err;
-      }
-    },
-    async request(...args){
-      try{return await current.request(...args)}catch(err){
-        if(!fallbackUsed && isTransportHandshakeError(err)){
-          await switchToLibcurl();
-          await current.init?.();
-          initialized=true;
-          return await current.request(...args);
-        }
-        throw err;
-      }
-    },
-    connect(...args){
-      const useFallback=async()=>{
-        const next=await switchToLibcurl();
-        await next.init?.();
-        initialized=true;
-        return next.connect(...args);
-      };
-      let switched=false;
-      const onError=args[6];
-      const wrappedError=(err)=>{
-        if(!switched && !fallbackUsed && isTransportHandshakeError(err)){
-          switched=true;
-          void useFallback().catch(e=>onError?.(e));
-          return;
-        }
-        return onError?.(err);
-      };
-      try{
-        return current.connect(args[0],args[1],args[2],args[3],args[4],args[5],wrappedError);
-      }catch(err){
-        if(!fallbackUsed && isTransportHandshakeError(err)) return useFallback();
-        throw err;
-      }
-    }
-  };
-}
 async function makeTransport(mode){
   const m=String(mode||'epoxy').toLowerCase();
-  const raw=await buildRawTransport(m);
-  activeTransportMode=m;
-  return makeResilientTransport(raw,m);
+  if(m==='libcurl'){
+    const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/libcurl-transport@2.0.5/dist/index.mjs');
+    const Client=mod.default||mod.LibcurlClient;
+    if(typeof Client!=='function') throw new TypeError('LibcurlClient export not found');
+    return new Client({wisp:WISP_URL});
+  }
+  const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3.0.1/dist/index.mjs');
+  const Client=mod.default||mod.EpoxyClient;
+  if(typeof Client!=='function') throw new TypeError('EpoxyClient export not found');
+  return new Client({wisp:WISP_URL});
 }
 
 async function openChickenCookieBackupDB(){
