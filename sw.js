@@ -1,7 +1,4 @@
-/* Chicken / Scramjet service worker
- * Keep this file beside index.html so GitHub Pages can register it at
- * /Funmath/sw.js (or the equivalent project-root path).
- */
+/* Scramjet 2.x service worker. Keep this file beside index.html. */
 importScripts('https://cdn.jsdelivr.net/npm/@mercuryworkshop/scramjet-controller@0.0.14/dist/controller.sw.js');
 
 self.addEventListener('fetch', event => {
@@ -10,7 +7,10 @@ self.addEventListener('fetch', event => {
   }
 });
 
-self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('install', event => {
+  event.waitUntil(self.skipWaiting());
+});
+
 self.addEventListener('activate', event => {
   event.waitUntil(self.clients.claim());
 });
