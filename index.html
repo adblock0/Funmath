@@ -129,6 +129,13 @@ function tabIcon(t){
 function renderTabs(){const wrap=$('tabs');wrap.innerHTML='';tabs.forEach((t,i)=>{const el=document.createElement('div');el.className='tab'+(i===active?' active':'');el.innerHTML=`<img src="${tabIcon(t)}" alt=""><span class="tab-title"></span><button class="tab-close" title="Close">×</button>`;
 const tabImg=el.querySelector('img');
 tabImg.addEventListener('error',()=>{tabImg.src=(t&&t.title==='New Tab')?newIcon:(settings.cloak==='resources'?resourcesIcon:newIcon)},{once:true});el.querySelector('.tab-title').textContent=t.title;el.addEventListener('click',e=>{if(e.target.closest('.tab-close'))return;activateTab(i);});el.querySelector('.tab-close').addEventListener('click',()=>closeTab(i));wrap.appendChild(el)})}
+function refreshTabChrome(t){
+  const idx=tabs.indexOf(t); if(idx<0)return;
+  const tab=document.querySelectorAll('#tabs .tab')[idx]; if(!tab)return;
+  const img=tab.querySelector('img'), title=tab.querySelector('.tab-title');
+  if(title)title.textContent=t.title||host(t.url);
+  if(img){img.src=tabIcon(t);img.addEventListener('error',()=>{img.src=(settings.cloak==='resources'?resourcesIcon:newIcon)},{once:true});}
+}
 function openDino(){const cloak=settings.cloak==='resources'?'resources':'newtab';location.assign(new URL('dino-game.html?from=chicken&cloak='+cloak+'&v=resources-back-20260927', window.location.href).href)}
 function getSearchHistory(){try{return JSON.parse(localStorage.getItem('chicken-search-history')||'[]')}catch{return[]}}
 function rememberSearch(q){if(!settings.suggestions)return;const list=getSearchHistory().filter(x=>x.toLowerCase()!==q.toLowerCase());list.unshift(q);localStorage.setItem('chicken-search-history',JSON.stringify(list.slice(0,8)))}
@@ -137,8 +144,7 @@ async function getRealSuggestions(q){
   const id=++suggestionRequest;
   const providers=[
     async()=>{const r=await fetch('https://suggestqueries.google.com/complete/search?client=firefox&hl=en&q='+encodeURIComponent(q),{mode:'cors',cache:'no-store'});if(!r.ok)throw 0;const d=await r.json();return Array.isArray(d?.[1])?d[1]:[]},
-    async()=>{const r=await fetch('https://duckduckgo.com/ac/?q='+encodeURIComponent(q)+'&type=list',{mode:'cors',cache:'no-store'});if(!r.ok)throw 0;const d=await r.json();return Array.isArray(d)?d.map(x=>x?.phrase):[]},
-    async()=>{const r=await fetch('https://api.bing.com/osjson.aspx?query='+encodeURIComponent(q),{mode:'cors',cache:'no-store'});if(!r.ok)throw 0;const d=await r.json();return Array.isArray(d?.[1])?d[1]:[]}
+    async()=>{const r=await fetch('https://duckduckgo.com/ac/?q='+encodeURIComponent(q)+'&type=list',{mode:'cors',cache:'no-store'});if(!r.ok)throw 0;const d=await r.json();return Array.isArray(d)?d.map(x=>x?.phrase):[]}
   ];
   for(const provider of providers){
     try{
@@ -147,7 +153,9 @@ async function getRealSuggestions(q){
       if(list.length)return list;
     }catch{}
   }
-  return [];
+  // A blocked CORS endpoint should never make the suggestion box appear broken.
+  const local=[q+' site:youtube.com',q+' site:spotify.com',q+' site:google.com',q+' site:wikipedia.org'];
+  return local.filter(x=>x.toLowerCase()!==q.toLowerCase());
 }
 function esc(x){return String(x).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function bindSuggestions(menu,input){menu.querySelectorAll('.suggestion-item[data-suggestion]').forEach(b=>b.onclick=()=>{const x=decodeURIComponent(b.dataset.suggestion);input.value=x;rememberSearch(x);menu.classList.remove('open');navigateInput(x)})}
@@ -477,12 +485,7 @@ function updateLiveAddress(t,url){
     const address=$('address');
     if(address && document.activeElement!==address) address.value=next;
   }
-  const idx=tabs.indexOf(t);
-  if(idx>=0){
-    const tab=document.querySelectorAll('#tabs .tab')[idx];
-    const title=tab?.querySelector('.tab-title');
-    if(title) title.textContent=t.title;
-  }
+  refreshTabChrome(t);
 }
 function externalView(v,t){
   let targetUrl;
@@ -556,7 +559,7 @@ function externalView(v,t){
     const utils=window.$scramjetUtils;
     const plugins=[];
     if(utils?.UrlWatcherPlugin) plugins.push(new utils.UrlWatcherPlugin(url=>updateLiveAddress(t,url)));
-    if(utils?.CatchEscapedLinksPlugin) plugins.push(new utils.CatchEscapedLinksPlugin(url=>url));
+    if(utils?.CatchEscapedLinksPlugin) plugins.push(new utils.CatchEscapedLinksPlugin(url=>{ try { if(t.scramFrame) t.scramFrame.go(String(url)); } catch(e) { console.warn('Chicken proxy link navigation failed',e); } return new URL(location.href); }));
     t.scramFrame=controller.createFrame(t.frameel,{plugins});
     t.scramFrame.go(t.url);
     loading?.remove();
