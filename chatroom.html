@@ -20,7 +20,7 @@ button,input{font:inherit}button{cursor:pointer}.wrap{height:100%;display:flex;f
       <button id="createRoom" class="secondary">Create room</button>
       <div class="field"><input id="roomInput" class="input" maxlength="12" placeholder="Room code"><button id="joinRoom" class="secondary">Join</button></div>
       <div class="room" id="roomState">Global room<small>Messages are shared globally.</small></div>
-      <div class="notice">Global uses the Firestore collection <b>chickenGlobalMessages</b>. LAN uses <b>chickenRooms/&lt;room&gt;/messages</b>. Your “clear” button only hides older messages on this device.</div>
+      <div class="notice">Global uses the Firestore collection <b>chickenGlobalMessages</b>. LAN uses <b>chickenRooms/&lt;room&gt;/messages</b>. Your “clear” button only clears the current view; it does not delete messages.</div>
       <div class="status" id="status">Connecting…</div>
     </aside>
     <section class="chat"><div class="messages" id="messages"></div><form class="composer" id="form"><input id="textInput" class="input" autocomplete="off" placeholder="Write a message…"><button class="primary">Send</button></form></section>
@@ -28,7 +28,7 @@ button,input{font:inherit}button{cursor:pointer}.wrap{height:100%;display:flex;f
 </div></div>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js';
-import { getFirestore, collection, addDoc, doc, query, orderBy, limit, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
+import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js';
 const firebaseConfig={apiKey:'AIzaSyAF7B7qYDrUi-C5_6LCjQfoXRhH95QmIio',authDomain:'v14a-bb967.firebaseapp.com',projectId:'v14a-bb967',storageBucket:'v14a-bb967.firebasestorage.app',messagingSenderId:'226123648400',appId:'1:226123648400:web:089323e070661a87c4b715',measurementId:'G-R9Q24182LC'};
 const db=getFirestore(initializeApp(firebaseConfig));
 const $=id=>document.getElementById(id); const key='chicken-chat-settings-v2';
@@ -44,12 +44,11 @@ const cookieName=cookiePrefs.name||readCookie('chicken_chat_name');
 const cookieRoom=cookiePrefs.room||readCookie('chicken_chat_room');
 let displayName=saved.name||cookieName||`Chicken_${Math.floor(1000+Math.random()*9000)}`; let mode=saved.mode||cookiePrefs.mode||'global'; let roomId=saved.room||cookieRoom||''; let unsubscribe=null;
 $('nameInput').value=displayName; $('roomInput').value=roomId; if(mode==='lan'){$('lanBtn').classList.add('active');$('globalBtn').classList.remove('active');} else {$('globalBtn').classList.add('active');$('lanBtn').classList.remove('active');}
-const clearKey=()=>`chicken-clear-${mode}-${mode==='lan'?roomId||'none':'global'}`;
 function save(){const prefs={name:displayName,room:roomId,mode};localStorage.setItem(key,JSON.stringify(prefs));writeCookie('chicken_chat_name',displayName);writeCookie('chicken_chat_room',roomId);writeCookie('chicken_chat_prefs',JSON.stringify(prefs));}
 save();
 function setStatus(t){$('status').textContent=t;}
 function target(){return mode==='global'?collection(db,'chickenGlobalMessages'):collection(db,'chickenRooms',roomId,'messages');}
-function start(){ if(unsubscribe) unsubscribe(); $('messages').innerHTML=''; if(mode==='lan'&&!roomId){$('roomState').innerHTML='No LAN room<small>Create or join one to chat privately.</small>';setStatus('Choose a LAN room.');return;} $('roomState').innerHTML=mode==='global'?'Global room<small>Messages are shared globally.</small>':`LAN • ${roomId}<small>Private room code.</small>`; const q=query(target(),orderBy('createdAt','desc'),limit(100)); unsubscribe=onSnapshot(q,snap=>{const cutoff=Number(localStorage.getItem(clearKey())||0); const docs=[...snap.docs].reverse(); $('messages').innerHTML=''; for(const d of docs){const m=d.data();const ms=m.createdAt?.toMillis?.()||m.clientTs||0;if(ms<cutoff)continue; render({id:d.id,...m,ms});} $('messages').scrollTop=$('messages').scrollHeight;setStatus('Connected');},err=>{console.error(err);setStatus('Firestore error — check your Firestore rules.');}); }
+function start(){ if(unsubscribe) unsubscribe(); $('messages').innerHTML=''; if(mode==='lan'&&!roomId){$('roomState').innerHTML='No LAN room<small>Create or join one to chat privately.</small>';setStatus('Choose a LAN room.');return;} $('roomState').innerHTML=mode==='global'?'Global room<small>Messages are shared globally.</small>':`LAN • ${roomId}<small>Private room code.</small>`; const q=query(target(),orderBy('createdAt','desc'),limit(100)); unsubscribe=onSnapshot(q,snap=>{const docs=[...snap.docs].reverse(); $('messages').innerHTML=''; for(const d of docs){const m=d.data();const ms=m.createdAt?.toMillis?.()||m.clientTs||0; render({id:d.id,...m,ms});} $('messages').scrollTop=$('messages').scrollHeight;setStatus('Connected');},err=>{console.error(err);setStatus('Firestore error — check your Firestore rules.');}); }
 function render(m){const el=document.createElement('div');el.className='msg'+(m.name===displayName?' mine':'');const when=m.ms?new Date(m.ms).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'';el.innerHTML=`<div class="who"></div><div class="body"></div><div class="time"></div>`;el.querySelector('.who').textContent=m.name||'Chicken';el.querySelector('.body').textContent=m.text||'';el.querySelector('.time').textContent=when;$('messages').appendChild(el);}
 $('saveName').onclick=()=>{displayName=$('nameInput').value.trim()||displayName;save();setStatus('Saved');};
 $('nameInput').addEventListener('change',()=>{displayName=$('nameInput').value.trim()||displayName;save();});
@@ -60,7 +59,7 @@ $('globalBtn').onclick=()=>{mode='global';save();$('globalBtn').classList.add('a
 $('lanBtn').onclick=()=>{mode='lan';save();$('lanBtn').classList.add('active');$('globalBtn').classList.remove('active');start();};
 $('createRoom').onclick=()=>{roomId=Math.random().toString(36).slice(2,8).toUpperCase();save();$('roomInput').value=roomId;mode='lan';$('lanBtn').classList.add('active');$('globalBtn').classList.remove('active');start();};
 $('joinRoom').onclick=()=>{const v=$('roomInput').value.trim().toUpperCase();if(!v)return;roomId=v;save();mode='lan';$('lanBtn').classList.add('active');$('globalBtn').classList.remove('active');start();};
-$('clearBtn').onclick=()=>{localStorage.setItem(clearKey(),String(Date.now()));start();};
+$('clearBtn').onclick=()=>{$('messages').innerHTML='';setStatus('Chat view cleared. New messages will appear normally.');};
 $('form').onsubmit=async e=>{e.preventDefault();const text=$('textInput').value.trim();if(!text||(mode==='lan'&&!roomId))return;try{await addDoc(target(),{name:displayName,text,clientTs:Date.now(),createdAt:serverTimestamp()});$('textInput').value='';}catch(err){console.error(err);setStatus('Could not send — check Firestore rules.');}};
 start();
 </script>
