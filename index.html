@@ -169,6 +169,45 @@ async function makeTransport(mode){
   return new Client({wisp});
 }
 
+async function openChickenCookieBackupDB(){
+  return await new Promise((resolve,reject)=>{
+    try{
+      const req=indexedDB.open('chicken-cookie-backup-v1',1);
+      req.onupgradeneeded=()=>{try{req.result.createObjectStore('state')}catch{}};
+      req.onsuccess=()=>resolve(req.result);
+      req.onerror=()=>reject(req.error||new Error('IndexedDB unavailable'));
+    }catch(e){reject(e)}
+  });
+}
+async function readChickenCookieBackup(){
+  try{
+    const db=await openChickenCookieBackupDB();
+    return await new Promise((resolve,reject)=>{
+      const tx=db.transaction('state','readonly'); const req=tx.objectStore('state').get('cookies');
+      req.onsuccess=()=>resolve(req.result||''); req.onerror=()=>reject(req.error);
+    });
+  }catch{return ''}
+}
+async function writeChickenCookieBackup(value){
+  if(!value)return;
+  try{
+    const db=await openChickenCookieBackupDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction('state','readwrite'); tx.objectStore('state').put(String(value),'cookies');
+      tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error);
+    });
+  }catch{}
+}
+async function persistChickenCookies(forceBackup=false){
+  try{
+    const jar=scramjetController?.cookieJar;
+    if(!jar)return;
+    const dump=typeof jar.dump==='function'?jar.dump():'';
+    if(dump && (forceBackup || dump!=='{}')) await writeChickenCookieBackup(dump);
+    if(typeof scramjetController.persistCookies==='function') await scramjetController.persistCookies();
+  }catch(e){console.warn('Cookie persistence:',e)}
+}
+
 async function initScramjetController(){
   if(scramjetController) return scramjetController;
   if(scramjetInitPromise) return scramjetInitPromise;
@@ -212,14 +251,26 @@ async function initScramjetController(){
       }
     });
     await scramjetController.wait();
-    // Scramjet 2.x persists its proxied cookie jar in IndexedDB. Flush the
-    // current jar when the page is backgrounded/unloaded as an extra safety
-    // net; normal Set-Cookie responses are already persisted by Controller.
+    // Scramjet 2.x has its own persistent CookieJar. We also keep a local
+    // backup so website sessions survive even if a browser clears or delays
+    // the controller's IndexedDB write. Never overwrite a non-empty live jar
+    // with the backup; only restore the backup when the live jar is empty.
+    try{
+      const jar=scramjetController.cookieJar;
+      const liveDump=typeof jar?.dump==='function'?jar.dump():'';
+      if((!liveDump || liveDump==='{}') && typeof jar?.load==='function'){
+        const backup=await readChickenCookieBackup();
+        if(backup){jar.load(backup);await scramjetController.persistCookies?.();}
+      }
+      await persistChickenCookies(true);
+    }catch(e){console.warn('Cookie backup restore:',e)}
     if(!window.__chickenCookiePersistenceInstalled){
       window.__chickenCookiePersistenceInstalled=true;
-      const flushCookies=()=>{try{void scramjetController?.persistCookies?.()}catch{}};
+      const flushCookies=()=>{void persistChickenCookies(true)};
       document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushCookies()});
       window.addEventListener('pagehide',flushCookies);
+      window.addEventListener('beforeunload',flushCookies);
+      setInterval(()=>{void persistChickenCookies(true)},10000);
     }
     setInterval(()=>{try{navigator.serviceWorker.controller?.postMessage('keepalive')}catch{}},15000);
     return scramjetController;
