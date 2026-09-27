@@ -73,7 +73,7 @@ body{overflow:hidden}.app{height:100%;display:flex;flex-direction:column;backgro
         <section class="section settings-pane" data-pane="search"><h3>Search</h3><p>Control the new-tab search experience, live address updates, and locally stored suggestions.</p><div class="settings-card"><div class="row"><label>Search engine</label><span style="font-size:12px;color:#aaa">Google</span></div><div class="row"><label>Suggestion history</label><button class="mini-btn" id="clearSearchHistory">Clear history</button></div></div></section>
         <section class="section settings-pane" data-pane="privacy"><h3>Privacy & Cloaking</h3><p>Choose the title and favicon used for the current Chicken page.</p><div class="settings-card"><div class="row"><label>Resources cloak</label><button class="mini-btn" id="cloakClever">Use Resources</button></div><div class="row"><label>New Tab cloak</label><button class="mini-btn" id="cloakNew">Use New Tab</button></div><div class="row"><label><strong>Ad blocker</strong><br><span style="color:#666;font-size:10px">Blocks common ad/tracker requests and hides ad containers inside proxied pages.</span></label><button class="switch on" id="adToggle" aria-label="Toggle ad blocker"><i></i></button></div><div class="row"><label>Block third-party trackers</label><button class="switch on" id="trackerToggle" aria-label="Toggle tracker blocking"><i></i></button></div><div class="label">Allowlist host</div><div class="row"><input class="setting-input" id="adAllowlist" placeholder="example.com, trusted.example"><button class="mini-btn" id="saveAllowlist">Save</button></div><div class="row"><label>Blocked on this page</label><strong id="blockedCount" style="font-size:13px;color:#fff">0</strong></div></div></section>
         <section class="section settings-pane" data-pane="panic"><h3>Panic Button</h3><p>Press the hotkey to immediately navigate the current tab to your configured panic URL.</p><div class="settings-card"><div class="label">Hotkey</div><input class="setting-input key-capture" id="panicKey" value="F9" placeholder="Press a key combination" readonly autocomplete="off"><div class="label">Custom Panic URL</div><input class="setting-input" id="panicUrl" value="https://classroom.google.com/" placeholder="https://classroom.google.com/"></div></section>
-        <section class="section settings-pane" data-pane="advanced"><h3>Advanced</h3><p>Transport and connection preferences for the Scramjet proxy.</p><div class="settings-card"><div class="label">Proxy transport</div><select class="setting-select" id="transport"><option value="epoxy">Eproxy (default)</option><option value="libcurl">Libcurl</option></select><div class="settings-actions"><button class="save-btn" id="saveSettings">Save settings</button><button class="mini-btn" id="resetSettings">Reset all settings</button></div></div></section>
+        <section class="section settings-pane" data-pane="advanced"><h3>Advanced</h3><p>Transport and connection preferences for the Scramjet proxy.</p><div class="settings-card"><div class="label">Proxy transport</div><select class="setting-select" id="transport"><option value="libcurl">Libcurl (default)</option></select><div class="settings-actions"><button class="save-btn" id="saveSettings">Save settings</button><button class="mini-btn" id="resetSettings">Reset all settings</button></div></div></section>
       </div>
     </div>
   </aside>
@@ -84,15 +84,15 @@ const KEY='chicken-settings-v8';
 const LEGACY_KEY='chicken-settings-v7';
 const DEFAULT_WALLPAPER_SOURCE='https://www.magnific.com/free-photos-vectors/black-white-wallpaper';
 const DEFAULT_WALLPAPER_IMAGE='https://img.magnific.com/premium-photo/abstract-black-stripes-white-background-wave-black-white-zebra-wallpaper-generative-ai_159242-31501.jpg?ga=GA1.1.877066675.1790480323&semt=ais_hybrid&w=740&q=80';
-const defaults={cloak:'resources',panicKey:'F9',panicUrl:'https://classroom.google.com/',adblock:true,trackerBlock:true,adAllowlist:'',transport:'epoxy',suggestions:true,background:DEFAULT_WALLPAPER_IMAGE};
+const defaults={cloak:'resources',panicKey:'F9',panicUrl:'https://classroom.google.com/',adblock:true,trackerBlock:true,adAllowlist:'',transport:'libcurl',suggestions:true,background:DEFAULT_WALLPAPER_IMAGE};
 let settings={...defaults};
 try{
   const current=JSON.parse(localStorage.getItem(KEY)||'null');
-  if(current && typeof current==='object') settings={...defaults,...current};
+  if(current && typeof current==='object') settings={...defaults,...current,transport:'libcurl'};
   else {
     const legacy=JSON.parse(localStorage.getItem(LEGACY_KEY)||'null');
     if(legacy && typeof legacy==='object'){
-      settings={...defaults,...legacy,transport:'epoxy'};
+      settings={...defaults,...legacy,transport:'libcurl'};
       localStorage.setItem(KEY,JSON.stringify(settings));
     }
   }
@@ -208,18 +208,27 @@ async function removeLegacyRootServiceWorker(){
 }
 
 const WISP_URL='wss://wisp.mercurywork.shop/';
+
 async function makeTransport(mode){
-  const m=String(mode||'epoxy').toLowerCase();
-  if(m==='libcurl'){
-    const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/libcurl-transport@2.0.5/dist/index.mjs');
-    const Client=mod.default||mod.LibcurlClient;
-    if(typeof Client!=='function') throw new TypeError('LibcurlClient export not found');
-    return new Client({wisp:WISP_URL});
+  // Use the Scramjet 2.x transport API directly.  The controller version
+  // bundled by Chicken expects the transport to be initialized before the
+  // Controller is constructed.  Do not wrap the client: the wrapper hides
+  // init() from the service-worker RPC bridge and causes
+  // `this.transport.init is not a function`.
+  const m=String(mode||'libcurl').toLowerCase();
+  let mod,Client;
+  if(m==='epoxy'){
+    mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3.0.1/dist/index.mjs');
+    Client=mod.EpoxyClient||mod.default;
+  }else{
+    mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/libcurl-transport@2.0.5/dist/index.mjs');
+    Client=mod.LibcurlClient||mod.default;
   }
-  const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3.0.1/dist/index.mjs');
-  const Client=mod.default||mod.EpoxyClient;
-  if(typeof Client!=='function') throw new TypeError('EpoxyClient export not found');
-  return new Client({wisp:WISP_URL});
+  if(typeof Client!=='function') throw new TypeError((m==='epoxy'?'EpoxyClient':'LibcurlClient')+' export not found');
+  const transport=new Client({wisp:WISP_URL});
+  if(typeof transport.init!=='function') throw new TypeError((m==='epoxy'?'EpoxyClient':'LibcurlClient')+' does not implement init()');
+  await transport.init();
+  return transport;
 }
 
 async function openChickenCookieBackupDB(){
@@ -637,8 +646,8 @@ $('suggestToggle').onclick=()=>{settings.suggestions=!settings.suggestions;$('su
 $('adToggle').classList.toggle('on',settings.adblock!==false);
 $('trackerToggle').classList.toggle('on',settings.trackerBlock!==false);
 $('adAllowlist').value=settings.adAllowlist||'';
-$('transport').value=settings.transport||'epoxy';
-$('transport').onchange=async()=>{settings.transport=$('transport').value;save();if(scramjetController){try{scramjetController.setTransport(await makeTransport(settings.transport));toast('Transport changed')}catch(e){toast('Transport change failed')}}else toast('Saved transport preference')};
+$('transport').value=settings.transport||'libcurl';
+$('transport').onchange=async()=>{settings.transport='libcurl';$('transport').value='libcurl';save();toast('Libcurl transport selected')};
 $('adToggle').onclick=()=>{settings.adblock=!settings.adblock;$('adToggle').classList.toggle('on',settings.adblock);save();toast(settings.adblock?'Ad blocker enabled':'Ad blocker disabled');render()};
 $('trackerToggle').onclick=()=>{settings.trackerBlock=!settings.trackerBlock;$('trackerToggle').classList.toggle('on',settings.trackerBlock);save();toast(settings.trackerBlock?'Tracker blocking enabled':'Tracker blocking disabled');render()};
 $('saveAllowlist').onclick=()=>{settings.adAllowlist=String($('adAllowlist').value||'').trim();save();toast('Ad blocker allowlist saved');render()};
