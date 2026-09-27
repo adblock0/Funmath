@@ -438,21 +438,48 @@ function minecraftView(v,t){
   f.className='chat-frame';
   f.setAttribute('allow','fullscreen; autoplay; picture-in-picture; gamepad; pointer-lock; clipboard-read; clipboard-write');
   f.setAttribute('referrerpolicy','no-referrer');
+  f.setAttribute('tabindex','0');
   f.title='Minecraft';
   f.style.position='absolute';f.style.left='0';f.style.top='0';f.style.right='0';f.style.bottom='0';f.style.width='100%';f.style.height='100%';f.style.border='0';
+  f.style.display='block';
   t.frameel=f;
   v.appendChild(f);
   const loading=loadingView(v,'Loading Minecraft…');
-  v.appendChild(f);
-  fetch(new URL('Minecraft.html',location.href).href,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Minecraft.html returned HTTP '+r.status);return r.blob()}).then(blob=>{
-    if(t.minecraftBlobUrl){try{URL.revokeObjectURL(t.minecraftBlobUrl)}catch{}}
-    t.minecraftBlobUrl=URL.createObjectURL(new Blob([blob],{type:'text/html'}));
-    f.onload=()=>{loading?.remove();try{f.contentWindow.focus()}catch{}};
-    f.src=t.minecraftBlobUrl;
-  }).catch(err=>{loading?.remove();errorView(v,'Minecraft could not load: '+(err?.message||String(err)));});
-  f.addEventListener('pointerdown',()=>{try{f.contentWindow.focus()}catch{}},{passive:true});
-}
 
+  const focusGame=()=>{
+    try{f.focus({preventScroll:true})}catch{try{f.focus()}catch{}}
+    try{f.contentWindow.focus()}catch{}
+  };
+  const activateGame=()=>{
+    focusGame();
+    // A second focus after the browser processes the iframe click helps
+    // Eaglercraft receive the keyboard/mouse activation inside Chicken.
+    setTimeout(focusGame,0);
+    setTimeout(focusGame,60);
+  };
+
+  f.addEventListener('load',()=>{
+    loading?.remove();
+    activateGame();
+  });
+  f.addEventListener('pointerdown',activateGame,{passive:true});
+  f.addEventListener('mousedown',activateGame,{passive:true});
+  f.addEventListener('focus',focusGame);
+
+  // Load the actual same-origin Minecraft document. Chicken's Scramjet
+  // service-worker scope is /~/sj/, so Minecraft.html itself is not proxied.
+  // Keeping the real document in the iframe preserves normal keyboard,
+  // text-input, canvas, and pointer-lock behavior.
+  f.src=new URL('Minecraft.html',location.href).href;
+
+  // If the user switches away and back to the Chicken tab, restore focus
+  // without stealing focus from the address bar while it is being edited.
+  const focusOnReturn=()=>{
+    if(t===current() && document.activeElement!==$('address')) focusGame();
+  };
+  t.minecraftFocus=focusOnReturn;
+  document.addEventListener('visibilitychange',focusOnReturn);
+}
 function updateLiveAddress(t,url){
   const next=String(url||'').trim();
   if(!next)return;
