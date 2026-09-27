@@ -17,6 +17,7 @@
 })();</script>
 <script src="https://cdn.jsdelivr.net/npm/@mercuryworkshop/scramjet@2.0.67-alpha.2/dist/scramjet.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mercuryworkshop/scramjet-controller@0.0.14/dist/controller.api.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mercuryworkshop/scramjet-utils@0.0.3/dist/scramjet-utils.js" crossorigin="anonymous"></script>
 <style>
 :root{--bg:#202124;--panel:#292a2d;--panel2:#303134;--line:#3c4043;--text:#e8eaed;--muted:#9aa0a6;--hover:#35363a;--white:#fff;--black:#202124;--shadow:0 18px 60px rgba(0,0,0,.35)}
 *{box-sizing:border-box}html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit}button{cursor:pointer}.hidden{display:none!important}
@@ -69,22 +70,33 @@ body{overflow:hidden}.app{height:100%;display:flex;flex-direction:column;backgro
           <div class="settings-card"><div class="label">Background</div><div class="background-preview" id="backgroundPreview">Default black &amp; white wallpaper</div><div style="margin:8px 0 12px;color:#666;font-size:10px">Default source: <a href="https://img.magnific.com/premium-photo/abstract-black-stripes-white-background-wave-black-white-zebra-wallpaper-generative-ai_159242-31501.jpg?ga=GA1.1.877066675.1790480323&semt=ais_hybrid&w=740&q=80" target="_blank" rel="noopener" style="color:#aaa">Magnific black &amp; white wallpaper image</a></div><div class="settings-actions"><label class="mini-btn" style="display:grid;place-items:center">Choose image<input id="backgroundFile" type="file" accept="image/*" hidden></label><button class="mini-btn" id="resetBackground">Reset to default</button><button class="mini-btn" id="removeBackground">Remove background</button></div></div>
           <div class="settings-card"><div class="label">Interface</div><div class="row"><label>Show search suggestions<br><span style="color:#666;font-size:10px">Recent searches and quick suggestions</span></label><button class="switch on" id="suggestToggle" aria-label="Toggle search suggestions"><i></i></button></div></div>
         </section>
-        <section class="section settings-pane" data-pane="search"><h3>Search</h3><p>Control the new-tab search experience and clear locally stored suggestions.</p><div class="settings-card"><div class="row"><label>Search engine</label><span style="font-size:12px;color:#aaa">Google</span></div><div class="row"><label>Suggestion history</label><button class="mini-btn" id="clearSearchHistory">Clear history</button></div></div></section>
+        <section class="section settings-pane" data-pane="search"><h3>Search</h3><p>Control the new-tab search experience, live address updates, and locally stored suggestions.</p><div class="settings-card"><div class="row"><label>Search engine</label><span style="font-size:12px;color:#aaa">Google</span></div><div class="row"><label>Suggestion history</label><button class="mini-btn" id="clearSearchHistory">Clear history</button></div></div></section>
         <section class="section settings-pane" data-pane="privacy"><h3>Privacy & Cloaking</h3><p>Choose the title and favicon used for the current Chicken page.</p><div class="settings-card"><div class="row"><label>Resources cloak</label><button class="mini-btn" id="cloakClever">Use Resources</button></div><div class="row"><label>New Tab cloak</label><button class="mini-btn" id="cloakNew">Use New Tab</button></div><div class="row"><label><strong>Ad blocker</strong><br><span style="color:#666;font-size:10px">Blocks common ad/tracker requests and hides ad containers inside proxied pages.</span></label><button class="switch on" id="adToggle" aria-label="Toggle ad blocker"><i></i></button></div><div class="row"><label>Block third-party trackers</label><button class="switch on" id="trackerToggle" aria-label="Toggle tracker blocking"><i></i></button></div><div class="label">Allowlist host</div><div class="row"><input class="setting-input" id="adAllowlist" placeholder="example.com, trusted.example"><button class="mini-btn" id="saveAllowlist">Save</button></div><div class="row"><label>Blocked on this page</label><strong id="blockedCount" style="font-size:13px;color:#fff">0</strong></div></div></section>
         <section class="section settings-pane" data-pane="panic"><h3>Panic Button</h3><p>Press the hotkey to immediately navigate the current tab to your configured panic URL.</p><div class="settings-card"><div class="label">Hotkey</div><input class="setting-input key-capture" id="panicKey" value="F9" placeholder="Press a key combination" readonly autocomplete="off"><div class="label">Custom Panic URL</div><input class="setting-input" id="panicUrl" value="https://classroom.google.com/" placeholder="https://classroom.google.com/"></div></section>
-        <section class="section settings-pane" data-pane="advanced"><h3>Advanced</h3><p>Transport and connection preferences for the Scramjet proxy.</p><div class="settings-card"><div class="label">Proxy transport</div><select class="setting-select" id="transport"><option value="libcurl">Libcurl (default)</option><option value="epoxy">Eproxy</option></select><div class="settings-actions"><button class="save-btn" id="saveSettings">Save settings</button><button class="mini-btn" id="resetSettings">Reset all settings</button></div></div></section>
+        <section class="section settings-pane" data-pane="advanced"><h3>Advanced</h3><p>Transport and connection preferences for the Scramjet proxy.</p><div class="settings-card"><div class="label">Proxy transport</div><select class="setting-select" id="transport"><option value="epoxy">Eproxy (default)</option><option value="libcurl">Libcurl</option></select><div class="settings-actions"><button class="save-btn" id="saveSettings">Save settings</button><button class="mini-btn" id="resetSettings">Reset all settings</button></div></div></section>
       </div>
     </div>
   </aside>
 </div>
 <div class="toast" id="toast"></div>
 <script>
-const KEY='chicken-settings-v7';
+const KEY='chicken-settings-v8';
+const LEGACY_KEY='chicken-settings-v7';
 const DEFAULT_WALLPAPER_SOURCE='https://www.magnific.com/free-photos-vectors/black-white-wallpaper';
 const DEFAULT_WALLPAPER_IMAGE='https://img.magnific.com/premium-photo/abstract-black-stripes-white-background-wave-black-white-zebra-wallpaper-generative-ai_159242-31501.jpg?ga=GA1.1.877066675.1790480323&semt=ais_hybrid&w=740&q=80';
-const defaults={cloak:'resources',panicKey:'F9',panicUrl:'https://classroom.google.com/',adblock:true,trackerBlock:true,adAllowlist:'',transport:'libcurl',suggestions:true,background:DEFAULT_WALLPAPER_IMAGE};
+const defaults={cloak:'resources',panicKey:'F9',panicUrl:'https://classroom.google.com/',adblock:true,trackerBlock:true,adAllowlist:'',transport:'epoxy',suggestions:true,background:DEFAULT_WALLPAPER_IMAGE};
 let settings={...defaults};
-try{settings={...defaults,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{}
+try{
+  const current=JSON.parse(localStorage.getItem(KEY)||'null');
+  if(current && typeof current==='object') settings={...defaults,...current};
+  else {
+    const legacy=JSON.parse(localStorage.getItem(LEGACY_KEY)||'null');
+    if(legacy && typeof legacy==='object'){
+      settings={...defaults,...legacy,transport:'epoxy'};
+      localStorage.setItem(KEY,JSON.stringify(settings));
+    }
+  }
+}catch{}
 if(!settings.background || settings.background==='https://cdn.wallpapersafari.com/15/70/ejZnEUf.jpg' || settings.background.includes('aHR0cHM6Ly9pbWcu bWFnbmlmaWMuY29t') || settings.background.includes('aHR0cHM6Ly9pbWcu'+'bWFnbmlmaWMuY29t')) settings.background=DEFAULT_WALLPAPER_IMAGE;
 if(settings.cloak==='clever') settings.cloak='resources';
 let tabs=[];let active=0;let toastTimer;
@@ -121,10 +133,25 @@ function openDino(){const cloak=settings.cloak==='resources'?'resources':'newtab
 function getSearchHistory(){try{return JSON.parse(localStorage.getItem('chicken-search-history')||'[]')}catch{return[]}}
 function rememberSearch(q){if(!settings.suggestions)return;const list=getSearchHistory().filter(x=>x.toLowerCase()!==q.toLowerCase());list.unshift(q);localStorage.setItem('chicken-search-history',JSON.stringify(list.slice(0,8)))}
 let suggestionRequest=0;
-async function getRealSuggestions(q){const id=++suggestionRequest;try{const r=await fetch('https://suggestqueries.google.com/complete/search?client=firefox&q='+encodeURIComponent(q),{mode:'cors'});if(!r.ok)throw 0;const d=await r.json();if(id!==suggestionRequest)return [];return Array.isArray(d?.[1])?d[1].filter(x=>typeof x==='string').slice(0,7):[]}catch{return[]}}
+async function getRealSuggestions(q){
+  const id=++suggestionRequest;
+  const providers=[
+    async()=>{const r=await fetch('https://suggestqueries.google.com/complete/search?client=firefox&hl=en&q='+encodeURIComponent(q),{mode:'cors',cache:'no-store'});if(!r.ok)throw 0;const d=await r.json();return Array.isArray(d?.[1])?d[1]:[]},
+    async()=>{const r=await fetch('https://duckduckgo.com/ac/?q='+encodeURIComponent(q)+'&type=list',{mode:'cors',cache:'no-store'});if(!r.ok)throw 0;const d=await r.json();return Array.isArray(d)?d.map(x=>x?.phrase):[]},
+    async()=>{const r=await fetch('https://api.bing.com/osjson.aspx?query='+encodeURIComponent(q),{mode:'cors',cache:'no-store'});if(!r.ok)throw 0;const d=await r.json();return Array.isArray(d?.[1])?d[1]:[]}
+  ];
+  for(const provider of providers){
+    try{
+      const list=(await provider()).filter(x=>typeof x==='string'&&x.trim()).slice(0,8);
+      if(id!==suggestionRequest)return [];
+      if(list.length)return list;
+    }catch{}
+  }
+  return [];
+}
 function esc(x){return String(x).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function bindSuggestions(menu,input){menu.querySelectorAll('.suggestion-item[data-suggestion]').forEach(b=>b.onclick=()=>{const x=decodeURIComponent(b.dataset.suggestion);input.value=x;rememberSearch(x);menu.classList.remove('open');navigateInput(x)})}
-async function showSuggestions(input,menu){if(!settings.suggestions){menu.classList.remove('open');return}const raw=input.value.trim();if(!raw){const h=getSearchHistory().slice(0,6);if(!h.length){menu.classList.remove('open');return}menu.innerHTML=h.map(x=>`<button class="suggestion-item" data-suggestion="${encodeURIComponent(x)}"><span class="suggestion-icon">◷</span><span class="suggestion-text">${esc(x)}</span><small>Recent</small></button>`).join('');menu.classList.add('open');bindSuggestions(menu,input);return}menu.innerHTML='<div class="suggestion-item" style="color:#777"><span class="suggestion-icon">⌕</span><span class="suggestion-text">Finding suggestions…</span></div>';menu.classList.add('open');const [remote,history]=await Promise.all([getRealSuggestions(raw),Promise.resolve(getSearchHistory())]);if(input.value.trim()!==raw||!settings.suggestions)return;const seen=new Set(),items=[];for(const x of remote.concat(history.filter(x=>x.toLowerCase().includes(raw.toLowerCase())))){const k=x.toLowerCase();if(!seen.has(k)){seen.add(k);items.push(x)}}if(!items.length){menu.classList.remove('open');return}menu.innerHTML=items.slice(0,8).map(x=>`<button class="suggestion-item" data-suggestion="${encodeURIComponent(x)}"><span class="suggestion-icon">⌕</span><span class="suggestion-text">${esc(x)}</span><small>Google</small></button>`).join('');menu.classList.add('open');bindSuggestions(menu,input)}
+async function showSuggestions(input,menu){if(!settings.suggestions){menu.classList.remove('open');return}const raw=input.value.trim();if(!raw){const h=getSearchHistory().slice(0,6);if(!h.length){menu.classList.remove('open');return}menu.innerHTML=h.map(x=>`<button class="suggestion-item" data-suggestion="${encodeURIComponent(x)}"><span class="suggestion-icon">◷</span><span class="suggestion-text">${esc(x)}</span><small>Recent</small></button>`).join('');menu.classList.add('open');bindSuggestions(menu,input);return}menu.innerHTML='<div class="suggestion-item" style="color:#777"><span class="suggestion-icon">⌕</span><span class="suggestion-text">Finding suggestions…</span></div>';menu.classList.add('open');const [remote,history]=await Promise.all([getRealSuggestions(raw),Promise.resolve(getSearchHistory())]);if(input.value.trim()!==raw||!settings.suggestions)return;const seen=new Set(),items=[];for(const x of remote.concat(history.filter(x=>x.toLowerCase().includes(raw.toLowerCase())))){const k=x.toLowerCase();if(!seen.has(k)){seen.add(k);items.push(x)}}if(!items.length){menu.classList.remove('open');return}menu.innerHTML=items.slice(0,8).map(x=>`<button class="suggestion-item" data-suggestion="${encodeURIComponent(x)}"><span class="suggestion-icon">⌕</span><span class="suggestion-text">${esc(x)}</span><small>Live</small></button>`).join('');menu.classList.add('open');bindSuggestions(menu,input)}
 function applyBackground(){const bg=settings.background||'';const imageValue=bg?`url("${bg}")`:'none';document.documentElement.style.setProperty('--chicken-bg-image',imageValue);const target=document.querySelector('.app');if(target){target.style.backgroundImage=imageValue;target.style.backgroundSize=bg?'cover':'';target.style.backgroundPosition=bg?'center':'';target.style.backgroundAttachment=bg?'fixed':''}document.body.style.backgroundImage=imageValue;document.body.style.backgroundSize=bg?'cover':'';document.body.style.backgroundPosition=bg?'center':'';document.body.style.backgroundAttachment=bg?'fixed':'';const preview=$('backgroundPreview');if(preview){preview.style.backgroundImage=bg?`url("${bg}")`:'';preview.textContent=bg===DEFAULT_WALLPAPER_IMAGE?'Default black & white wallpaper':(bg?'Custom background':'No background')}}
 function compressImage(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>{const img=new Image();img.onload=()=>{const max=1800,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL('image/jpeg',.78))};img.onerror=reject;img.src=reader.result};reader.onerror=reject;reader.readAsDataURL(file)})}
 function homeView(v){v.innerHTML=`<div class="home"><div class="wordmark chicken-mark" aria-label="Chicken"><img class="chicken-logo" src="chicken.png" alt=""><span class="chicken-glass">CHICKEN</span></div><div class="subtitle">Search the web with a clean, private-feeling interface.</div><div class="search-wrap search-suggestions"><form class="big-search"><span class="search-icon">⌕</span><input id="homeSearch" placeholder="Search the web or enter an address" autocomplete="off"><button class="search-submit">Search</button></form><div class="suggestion-menu" id="suggestionMenu"></div></div><div class="shortcuts"><button class="shortcut" data-url="https://duck.ai/" data-title="Duck.ai"><span class="shortcut-icon"><svg viewBox="0 0 64 64" aria-hidden="true" style="width:1em;height:1em;display:block"><path d="M32 8c-7 0-12 4-14 9-7 0-12 5-12 12 0 5 3 9 7 11-1 6 3 12 9 14 4 1 8 0 11-3 5 3 12 2 16-2 4-4 5-10 2-15 4-3 5-9 3-14-3-6-9-9-15-8-2-3-4-4-7-4zm-9 15 9-5 9 5v10l-9 5-9-5V23zm-4 17 9 5v8c-2 2-5 2-7 1-3-1-4-5-2-8v-6zm17 13v-8l9-5 7 4c1 3 0 6-2 8-3 3-7 3-10 1l-4 0zm9-16V27l7-4c3 2 4 5 3 8-1 3-3 5-6 5l-4-1z" fill="currentColor"/></svg></span><span><b>Duck.ai</b><small>duck.ai</small></span></button><button class="shortcut" data-url="http://crazygames.com/" data-title="CrazyGames"><span class="shortcut-icon">🎮</span><span><b>CrazyGames</b><small>crazygames.com</small></span></button><button class="shortcut" data-url="https://web-dashers.github.io/" data-title="GD"><span class="shortcut-icon">GD</span><span><b>GD</b><small>web-dashers.github.io</small></span></button><button class="shortcut" data-url="Minecraft.html" data-title="Minecraft" data-minecraft="1"><span class="shortcut-icon">⛏️</span><span><b>Minecraft</b><small>Minecraft.html</small></span></button><button class="shortcut" data-url="https://playlistsound.com/" data-title="Music"><span class="shortcut-icon"><svg viewBox="0 0 64 64" aria-hidden="true" style="width:1em;height:1em;display:block"><path d="M39 10v31.5a10.5 10.5 0 1 1-5-8.9V20h18V10H39zm0 15h13v-6H39v6z" fill="currentColor"/></svg></span><span><b>Music</b><small>playlistsound.com</small></span></button><button class="shortcut" data-chat="1"><span class="shortcut-icon">◌</span><span><b>Chatroom</b><small>Global + LAN</small></span></button><button class="shortcut" data-dino="1"><span class="shortcut-icon"><svg viewBox="0 0 64 64" aria-hidden="true" style="width:1em;height:1em;display:block"><path d="M10 47h44v5H10zM15 42h8V29h-4c-4 0-7-3-7-7s3-7 7-7h13c6 0 11 5 11 11v2h7v8H37v6h12v5H15zM19 20c-1 0-2 1-2 2s1 2 2 2h9v-4h-9zm20 8v-2c0-3-2-6-5-7v9h5z" fill="currentColor"/></svg></span><span><b>Dino game</b><small>dino-game.html</small></span></button></div></div>`;const form=v.querySelector('form'),input=v.querySelector('#homeSearch'),menu=v.querySelector('#suggestionMenu');form.addEventListener('submit',e=>{e.preventDefault();const x=input.value.trim();if(x){rememberSearch(x);navigateInput(x)}});input.addEventListener('input',()=>showSuggestions(input,menu));input.addEventListener('focus',()=>showSuggestions(input,menu));document.addEventListener('click',e=>{if(!e.target.closest('.search-suggestions'))menu.classList.remove('open')});v.querySelectorAll('.shortcut').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.chat)openChat();else if(b.dataset.dino)openDino();else if(b.dataset.minecraft){openMinecraft()}else openUrl(b.dataset.url,b.dataset.title)}))}
@@ -180,20 +207,76 @@ async function removeLegacyRootServiceWorker(){
   return removed;
 }
 
-async function makeTransport(mode){
-  const m=String(mode||'libcurl').toLowerCase();
-  const wisp='wss://wisp.mercurywork.shop/';
-  // Scramjet's official 2.x demo constructs the transport and passes it
-  // directly to Controller. Do NOT await a transport init here: that can
-  // wait on the Wisp socket before a frame has even been created.
+const WISP_URL='wss://wisp.mercurywork.shop/';
+let activeTransportMode='';
+let fallbackTransportPromise=null;
+function isTransportHandshakeError(err){
+  const msg=String(err?.message||err||'').toLowerCase();
+  return /tls handshake eof|unexpected eof|handshake.*eof|tls.*handshake|connect.*unexpected eof/.test(msg);
+}
+async function buildRawTransport(mode){
+  const m=String(mode||'epoxy').toLowerCase();
+  // Scramjet 2.x expects the transport object directly on Controller.
   if(m==='epoxy'){
     const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3.0.1/dist/index.mjs');
     const Client=mod.default||mod.EpoxyClient||mod;
-    return new Client({wisp});
+    return new Client({wisp:WISP_URL});
   }
   const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/libcurl-transport@2.0.5/dist/index.mjs');
   const Client=mod.default||mod.LibcurlClient||mod;
-  return new Client({wisp});
+  return new Client({wisp:WISP_URL});
+}
+async function makeLibcurlFallback(){
+  if(!fallbackTransportPromise) fallbackTransportPromise=buildRawTransport('libcurl');
+  return fallbackTransportPromise;
+}
+function makeResilientTransport(primary,mode){
+  let current=primary;
+  let fallbackUsed=String(mode||'').toLowerCase()!=='epoxy';
+  return {
+    async request(...args){
+      try{return await current.request(...args)}catch(err){
+        if(!fallbackUsed && isTransportHandshakeError(err)){
+          fallbackUsed=true;
+          current=await makeLibcurlFallback();
+          if(scramjetController) scramjetController.setTransport(current);
+          toast('Eproxy TLS failed — switched to Libcurl');
+          return await current.request(...args);
+        }
+        throw err;
+      }
+    },
+    connect(...args){
+      const useFallback=()=>makeLibcurlFallback().then(next=>{
+        fallbackUsed=true; current=next;
+        if(scramjetController) scramjetController.setTransport(current);
+        toast('Eproxy connection failed — switched to Libcurl');
+        return next.connect(...args);
+      });
+      let switched=false;
+      const onError=args[6];
+      const wrappedError=(err)=>{
+        if(!switched && !fallbackUsed && isTransportHandshakeError(err)){
+          switched=true;
+          void useFallback();
+          return;
+        }
+        return onError?.(err);
+      };
+      try{
+        return current.connect(args[0],args[1],args[2],args[3],args[4],args[5],wrappedError);
+      }catch(err){
+        if(!fallbackUsed && isTransportHandshakeError(err)) return useFallback();
+        throw err;
+      }
+    }
+  };
+}
+async function makeTransport(mode){
+  const m=String(mode||'epoxy').toLowerCase();
+  const raw=await buildRawTransport(m);
+  activeTransportMode=m;
+  return makeResilientTransport(raw,m);
 }
 
 async function openChickenCookieBackupDB(){
@@ -268,7 +351,7 @@ async function initScramjetController(){
     if(!serviceworker) throw new Error('No active Scramjet service worker is available. Upload sj-sw.js beside index.html and reload once.');
 
     // Match the current Scramjet 2.x transport interface.
-    const transport=await makeTransport(settings.transport||'libcurl');
+    const transport=await makeTransport(settings.transport||'epoxy');
     scramjetController=new Controller({
       serviceworker,
       transport,
@@ -370,6 +453,22 @@ function minecraftView(v,t){
   f.addEventListener('pointerdown',()=>{try{f.contentWindow.focus()}catch{}},{passive:true});
 }
 
+function updateLiveAddress(t,url){
+  const next=String(url||'').trim();
+  if(!next)return;
+  t.url=next;
+  t.title=host(next);
+  if(t===current()){
+    const address=$('address');
+    if(address && document.activeElement!==address) address.value=next;
+  }
+  const idx=tabs.indexOf(t);
+  if(idx>=0){
+    const tab=document.querySelectorAll('#tabs .tab')[idx];
+    const title=tab?.querySelector('.tab-title');
+    if(title) title.textContent=t.title;
+  }
+}
 function externalView(v,t){
   let targetUrl;
   try{targetUrl=new URL(t.url,location.href)}catch(e){
@@ -439,7 +538,11 @@ function externalView(v,t){
   initWithTimeout.then(controller=>{
     if(t.frameel.parentElement!==v) v.appendChild(t.frameel);
     t.frameel.style.display='block';
-    t.scramFrame=controller.createFrame(t.frameel);
+    const utils=window.$scramjetUtils;
+    const plugins=[];
+    if(utils?.UrlWatcherPlugin) plugins.push(new utils.UrlWatcherPlugin(url=>updateLiveAddress(t,url)));
+    if(utils?.CatchEscapedLinksPlugin) plugins.push(new utils.CatchEscapedLinksPlugin(url=>url));
+    t.scramFrame=controller.createFrame(t.frameel,{plugins});
     t.scramFrame.go(t.url);
     loading?.remove();
     toast('Proxying • Scramjet');
@@ -528,7 +631,7 @@ $('suggestToggle').onclick=()=>{settings.suggestions=!settings.suggestions;$('su
 $('adToggle').classList.toggle('on',settings.adblock!==false);
 $('trackerToggle').classList.toggle('on',settings.trackerBlock!==false);
 $('adAllowlist').value=settings.adAllowlist||'';
-$('transport').value=settings.transport||'libcurl';
+$('transport').value=settings.transport||'epoxy';
 $('transport').onchange=async()=>{settings.transport=$('transport').value;save();if(scramjetController){try{scramjetController.setTransport(await makeTransport(settings.transport));toast('Transport changed')}catch(e){toast('Transport change failed')}}else toast('Saved transport preference')};
 $('adToggle').onclick=()=>{settings.adblock=!settings.adblock;$('adToggle').classList.toggle('on',settings.adblock);save();toast(settings.adblock?'Ad blocker enabled':'Ad blocker disabled');render()};
 $('trackerToggle').onclick=()=>{settings.trackerBlock=!settings.trackerBlock;$('trackerToggle').classList.toggle('on',settings.trackerBlock);save();toast(settings.trackerBlock?'Tracker blocking enabled':'Tracker blocking disabled');render()};
