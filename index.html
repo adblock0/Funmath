@@ -143,14 +143,41 @@ let scramjetController=null;
 let scramjetInitPromise=null;
 
 async function waitForServiceWorkerControl(registration){
-  if(navigator.serviceWorker.controller) return navigator.serviceWorker.controller;
-  const ready = navigator.serviceWorker.ready.then(()=>navigator.serviceWorker.controller || registration.active).catch(()=>null);
-  const controllerChanged = new Promise(resolve=>{
-    const onChange=()=>{navigator.serviceWorker.removeEventListener('controllerchange',onChange);resolve(navigator.serviceWorker.controller||registration.active||null)};
-    navigator.serviceWorker.addEventListener('controllerchange',onChange,{once:true});
+  if(registration.active?.state==='activated') return registration.active;
+  const sw=registration.installing||registration.waiting||registration.active;
+  if(!sw) return null;
+  if(sw.state==='activated') return sw;
+  return await new Promise(resolve=>{
+    let done=false;
+    const finish=()=>{if(done)return;done=true;sw.removeEventListener('statechange',onState);resolve(registration.active||sw||null)};
+    const onState=()=>{if(sw.state==='activated'||sw.state==='redundant')finish()};
+    sw.addEventListener('statechange',onState);
+    setTimeout(finish,10000);
   });
-  const timeout = new Promise(resolve=>setTimeout(()=>resolve(navigator.serviceWorker.controller||registration.active||null),10000));
-  return await Promise.race([ready,controllerChanged,timeout]);
+}
+
+async function removeLegacyRootServiceWorker(){
+  if(!('serviceWorker' in navigator)) return false;
+  const rootScope=new URL('./',location.href).href;
+  const swUrl=new URL('./sw.js',location.href).href;
+  const reloadKey='chicken-scramjet-root-sw-removed-v2';
+  let removed=false;
+  try{
+    const regs=await navigator.serviceWorker.getRegistrations();
+    for(const reg of regs){
+      const activeScript=reg.active?.scriptURL||reg.waiting?.scriptURL||reg.installing?.scriptURL||'';
+      if(reg.scope===rootScope && new URL(activeScript,location.href).pathname===new URL(swUrl,location.href).pathname){
+        removed=await reg.unregister()||removed;
+      }
+    }
+    if(removed && !sessionStorage.getItem(reloadKey)){
+      sessionStorage.setItem(reloadKey,'1');
+      location.reload();
+      await new Promise(()=>{});
+    }
+    if(!removed) sessionStorage.removeItem(reloadKey);
+  }catch(e){console.warn('Legacy service worker cleanup:',e)}
+  return removed;
 }
 
 async function makeTransport(mode){
@@ -221,32 +248,14 @@ async function initScramjetController(){
     if(typeof Controller!=='function') throw new Error('Scramjet Controller API did not load.');
     window.$scramjetController?.assertRuntimeScramjetVersion?.();
 
-    // Only let Scramjet control its own rewritten URL namespace. A root-scoped
-    // worker also controls local pages such as Minecraft.html and can make
-    // Scramjet treat their normal same-origin requests as proxy traffic.
+    // Remove the legacy root-scoped Scramjet worker from earlier Chicken
+    // builds before setting up the new narrowly-scoped worker.
+    await removeLegacyRootServiceWorker();
+
+    // Only let Scramjet control its own rewritten URL namespace. Local pages
+    // such as Minecraft.html stay outside this scope and load normally.
     const swUrl=new URL('./sw.js',location.href).href;
     const scope=new URL('./~/sj/',location.href).pathname;
-    const rootScope=new URL('./',location.href).href;
-    const reloadKey='chicken-scramjet-scope-migrated-v1';
-
-    // Remove the old root-scoped registration from earlier Chicken builds.
-    // If this page is currently controlled by that worker, reload once so the
-    // new page is no longer under the broad service-worker scope.
-    try{
-      const regs=await navigator.serviceWorker.getRegistrations();
-      let removedRoot=false;
-      for(const reg of regs){
-        if(reg.scope===rootScope){
-          removedRoot=await reg.unregister()||removedRoot;
-        }
-      }
-      if(removedRoot && navigator.serviceWorker.controller?.scriptURL===swUrl && !sessionStorage.getItem(reloadKey)){
-        sessionStorage.setItem(reloadKey,'1');
-        location.reload();
-        await new Promise(()=>{});
-      }
-      sessionStorage.removeItem(reloadKey);
-    }catch(e){console.warn('Scramjet scope cleanup:',e)}
 
     // Verify the worker file itself is reachable before registering it.
     const swCheck=await fetch(swUrl,{cache:'no-store'});
@@ -295,7 +304,8 @@ async function initScramjetController(){
       window.addEventListener('beforeunload',flushCookies);
       setInterval(()=>{void persistChickenCookies(true)},10000);
     }
-    setInterval(()=>{try{navigator.serviceWorker.controller?.postMessage('keepalive')}catch{}},15000);
+    const scramjetServiceWorker=serviceworker;
+    setInterval(()=>{try{scramjetServiceWorker?.postMessage('keepalive')}catch{}},15000);
     return scramjetController;
   })().catch(err=>{scramjetInitPromise=null;throw err});
   return scramjetInitPromise;
