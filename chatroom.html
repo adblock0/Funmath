@@ -32,11 +32,19 @@ import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, se
 const firebaseConfig={apiKey:'AIzaSyAF7B7qYDrUi-C5_6LCjQfoXRhH95QmIio',authDomain:'v14a-bb967.firebaseapp.com',projectId:'v14a-bb967',storageBucket:'v14a-bb967.firebasestorage.app',messagingSenderId:'226123648400',appId:'1:226123648400:web:089323e070661a87c4b715',measurementId:'G-R9Q24182LC'};
 const db=getFirestore(initializeApp(firebaseConfig));
 const $=id=>document.getElementById(id); const key='chicken-chat-settings-v1';
-const saved=JSON.parse(localStorage.getItem(key)||'{}');
-let displayName=saved.name||`Chicken_${Math.floor(1000+Math.random()*9000)}`; let mode='global'; let roomId=saved.room||''; let unsubscribe=null;
+function readCookie(name){try{const hit=document.cookie.split('; ').find(v=>v.startsWith(encodeURIComponent(name)+'='));return hit?decodeURIComponent(hit.split('=').slice(1).join('=')):'';}catch{return '';}}
+function writeCookie(name,value){try{document.cookie=`${encodeURIComponent(name)}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/; SameSite=Lax; Secure`;}catch{}}
+let saved={};
+try{saved=JSON.parse(localStorage.getItem(key)||'{}')||{};}catch{}
+// Keep chatroom preferences in both localStorage and a first-party cookie so
+// they survive normal reloads even if one storage mechanism is cleared.
+const cookieName=readCookie('chicken_chat_name');
+const cookieRoom=readCookie('chicken_chat_room');
+let displayName=saved.name||cookieName||`Chicken_${Math.floor(1000+Math.random()*9000)}`; let mode='global'; let roomId=saved.room||cookieRoom||''; let unsubscribe=null;
 $('nameInput').value=displayName;
 const clearKey=()=>`chicken-clear-${mode}-${mode==='lan'?roomId||'none':'global'}`;
-function save(){localStorage.setItem(key,JSON.stringify({name:displayName,room:roomId}));}
+function save(){localStorage.setItem(key,JSON.stringify({name:displayName,room:roomId}));writeCookie('chicken_chat_name',displayName);writeCookie('chicken_chat_room',roomId);}
+save();
 function setStatus(t){$('status').textContent=t;}
 function target(){return mode==='global'?collection(db,'chickenGlobalMessages'):collection(db,'chickenRooms',roomId,'messages');}
 function start(){ if(unsubscribe) unsubscribe(); $('messages').innerHTML=''; if(mode==='lan'&&!roomId){$('roomState').innerHTML='No LAN room<small>Create or join one to chat privately.</small>';setStatus('Choose a LAN room.');return;} $('roomState').innerHTML=mode==='global'?'Global room<small>Messages are shared globally.</small>':`LAN • ${roomId}<small>Private room code.</small>`; const q=query(target(),orderBy('createdAt','desc'),limit(100)); unsubscribe=onSnapshot(q,snap=>{const cutoff=Number(localStorage.getItem(clearKey())||0); const docs=[...snap.docs].reverse(); $('messages').innerHTML=''; for(const d of docs){const m=d.data();const ms=m.createdAt?.toMillis?.()||m.clientTs||0;if(ms<cutoff)continue; render({id:d.id,...m,ms});} $('messages').scrollTop=$('messages').scrollHeight;setStatus('Connected');},err=>{console.error(err);setStatus('Firestore error — check your Firestore rules.');}); }
