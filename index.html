@@ -233,32 +233,61 @@ async function makeLibcurlFallback(){
 function makeResilientTransport(primary,mode){
   let current=primary;
   let fallbackUsed=String(mode||'').toLowerCase()!=='epoxy';
+  let initialized=false;
+
+  const switchToLibcurl=async()=>{
+    const next=await makeLibcurlFallback();
+    current=next;
+    fallbackUsed=true;
+    initialized=false;
+    if(scramjetController) scramjetController.setTransport(next);
+    toast('Eproxy connection failed — switched to Libcurl');
+    return next;
+  };
+
   return {
+    get ready(){return !!current?.ready && initialized;},
+    async init(){
+      if(initialized) return;
+      try{
+        if(typeof current?.init!=='function') throw new TypeError('Selected transport does not implement init()');
+        await current.init();
+        initialized=true;
+      }catch(err){
+        if(!fallbackUsed && isTransportHandshakeError(err)){
+          await switchToLibcurl();
+          if(typeof current?.init!=='function') throw new TypeError('Libcurl transport does not implement init()');
+          await current.init();
+          initialized=true;
+          return;
+        }
+        throw err;
+      }
+    },
     async request(...args){
       try{return await current.request(...args)}catch(err){
         if(!fallbackUsed && isTransportHandshakeError(err)){
-          fallbackUsed=true;
-          current=await makeLibcurlFallback();
-          if(scramjetController) scramjetController.setTransport(current);
-          toast('Eproxy TLS failed — switched to Libcurl');
+          await switchToLibcurl();
+          await current.init?.();
+          initialized=true;
           return await current.request(...args);
         }
         throw err;
       }
     },
     connect(...args){
-      const useFallback=()=>makeLibcurlFallback().then(next=>{
-        fallbackUsed=true; current=next;
-        if(scramjetController) scramjetController.setTransport(current);
-        toast('Eproxy connection failed — switched to Libcurl');
+      const useFallback=async()=>{
+        const next=await switchToLibcurl();
+        await next.init?.();
+        initialized=true;
         return next.connect(...args);
-      });
+      };
       let switched=false;
       const onError=args[6];
       const wrappedError=(err)=>{
         if(!switched && !fallbackUsed && isTransportHandshakeError(err)){
           switched=true;
-          void useFallback();
+          void useFallback().catch(e=>onError?.(e));
           return;
         }
         return onError?.(err);
