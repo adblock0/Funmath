@@ -1,0 +1,19 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Loading Minecraft…</title><style>html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;font-family:system-ui,sans-serif;display:grid;place-items:center}#msg{opacity:.8}</style></head><body><div id="msg">Starting Minecraft…</div><script>
+(async()=>{
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+      if (navigator.serviceWorker.controller) {
+        await new Promise(resolve => {
+          const done = () => { navigator.serviceWorker.removeEventListener('controllerchange', done); resolve(); };
+          navigator.serviceWorker.addEventListener('controllerchange', done);
+          setTimeout(resolve, 500);
+        });
+      }
+    }
+  } catch (e) { console.warn('Service-worker cleanup failed:', e); }
+  location.replace('./Minecraft.html?direct=1');
+})();
+</script></body></html>
