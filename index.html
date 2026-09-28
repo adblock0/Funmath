@@ -218,25 +218,77 @@ async function removeLegacyRootServiceWorker(){
 const WISP_URL='wss://wisp.mercurywork.shop/';
 
 async function makeTransport(mode){
-  // Use the Scramjet 2.x transport API directly.  The controller version
-  // bundled by Chicken expects the transport to be initialized before the
-  // Controller is constructed.  Do not wrap the client: the wrapper hides
-  // init() from the service-worker RPC bridge and causes
-  // `this.transport.init is not a function`.
-  const m=String(mode||'libcurl').toLowerCase();
-  let mod,Client;
-  if(m==='epoxy'){
-    mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3.0.1/dist/index.mjs');
-    Client=mod.EpoxyClient||mod.default;
-  }else{
-    mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/libcurl-transport@2.0.5/dist/index.mjs');
-    Client=mod.LibcurlClient||mod.default;
+  // Scramjet 2.x uses the proxy-transports interface. Eproxy is kept as the
+  // default and is wrapped only to recover a dead Wisp multiplexor. The
+  // wrapper itself implements init/ready/request/connect, so it remains a
+  // valid ProxyTransport instead of hiding the transport API.
+  const m=String(mode||'epoxy').toLowerCase();
+  if(m!=='epoxy'){
+    const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/libcurl-transport@2.0.5/dist/index.mjs');
+    const Client=mod.LibcurlClient||mod.default;
+    if(typeof Client!=='function') throw new TypeError('LibcurlClient export not found');
+    const transport=new Client({wisp:WISP_URL});
+    if(typeof transport.init==='function') await transport.init();
+    return transport;
   }
-  if(typeof Client!=='function') throw new TypeError((m==='epoxy'?'EpoxyClient':'LibcurlClient')+' export not found');
-  const transport=new Client({wisp:WISP_URL});
-  if(typeof transport.init!=='function') throw new TypeError((m==='epoxy'?'EpoxyClient':'LibcurlClient')+' does not implement init()');
-  await transport.init();
-  return transport;
+
+  const mod=await import('https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@3.0.1/dist/index.mjs');
+  const Client=mod.EpoxyClient||mod.default;
+  if(typeof Client!=='function') throw new TypeError('EpoxyClient export not found');
+
+  let inner=new Client({wisp:WISP_URL});
+  let ready=false;
+  let rebuilding=null;
+
+  const initInner=async()=>{
+    if(typeof inner.init==='function' && !inner.ready) await inner.init();
+    ready=true;
+  };
+
+  const isDeadWisp=(err)=>/MuxTaskEnded|multiplexor task ended|Wisp\(/i.test(String(err?.message||err||''));
+
+  const rebuild=async()=>{
+    if(rebuilding) return rebuilding;
+    rebuilding=(async()=>{
+      try{
+        const next=new Client({wisp:WISP_URL});
+        if(typeof next.init==='function') await next.init();
+        inner=next;
+        ready=true;
+      }finally{
+        rebuilding=null;
+      }
+    })();
+    return rebuilding;
+  };
+
+  await initInner();
+
+  return {
+    get ready(){return ready && (!!inner.ready || typeof inner.ready==='undefined');},
+    async init(){await initInner();},
+    async request(remote,method,body,headers,signal){
+      try{
+        return await inner.request(remote,method,body,headers,signal);
+      }catch(e){
+        if(!isDeadWisp(e)) throw e;
+        await rebuild();
+        return await inner.request(remote,method,body,headers,signal);
+      }
+    },
+    connect(url,protocols,requestHeaders,onopen,onmessage,onclose,onerror){
+      try{
+        return inner.connect(url,protocols,requestHeaders,onopen,onmessage,onclose,onerror);
+      }catch(e){
+        if(!isDeadWisp(e)) throw e;
+        // connect() is synchronous by contract; the fresh transport is used
+        // for subsequent connections while this one reports a clean failure.
+        void rebuild();
+        onerror?.(String(e?.message||e));
+        return [()=>{},()=>{}];
+      }
+    }
+  };
 }
 
 async function openChickenCookieBackupDB(){
